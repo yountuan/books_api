@@ -39,12 +39,15 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
+    'social_django',
+
     #libs
     'rest_framework',
     'rest_framework.authtoken',
-    'social_django',
     'django_filters',
     'drf_yasg',
+
     #apps
     'books',
     'orders',
@@ -170,5 +173,5 @@ DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL')
 
 SOCIAL_AUTH_JSONFIELD_ENABLED = True
 
-SOCIAL_AUTH_GITHUB_KEY = 'df90817624cdec6ed199'
-SOCIAL_AUTH_GITHUB_SECRET = '77ffaec6d356ccd163c4986c47bab43af4cfcd7e'
+SOCIAL_AUTH_GITHUB_KEY = '34927821e56410338d49'
+SOCIAL_AUTH_GITHUB_SECRET = '3839ec4e0484d09f43031f5a64686570a101e90d'

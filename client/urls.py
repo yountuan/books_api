@@ -1,7 +1,6 @@
-from django.urls import path
+from django.urls import path, re_path, include
 from .views import *
 
-app_name = 'books'
 
 urlpatterns = [
     path('register/', RegistrationView.as_view()),
@@ -12,6 +11,7 @@ urlpatterns = [
     path('api/user-detail/', CustomUserView.as_view(), name='user-detail'),
     path('add-to-wishlist/<int:book_id>/', add_to_wishlist, name='add_to_wishlist'),
     path('remove-from-wishlist/<int:book_id>/', remove_from_wishlist, name='remove_from_wishlist'),
+
 
 
 ]
