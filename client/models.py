@@ -24,7 +24,7 @@ class CustomUserManager(BaseUserManager):
 
 class CustomUser(AbstractBaseUser, PermissionsMixin):
     city_choice = ((1, 'Bishkek'), (2, 'Osh'))
-    email = models.EmailField(primary_key=True, unique=True)
+    email = models.EmailField(unique=True)
     name = models.CharField(max_length=30)
     city = models.PositiveSmallIntegerField(choices=city_choice, default=1)
     address = models.TextField(blank=True)
@@ -46,14 +46,14 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         self.activation_code = code
         self.save()
 
-    def send_activation_code(self, email, activation_code):
-        message = f'''
-        You are successfully registered in our web site. To activate your account please enter the code: {activation_code}
-        '''
+    def add_book_to_wishlist(self, book_id):
+        if book_id not in self.wishlist:
+            self.wishlist.append(book_id)
+            self.save()
 
-        send_mail(
-            'Account activation',
-            message,
-            'test@gmail.com',
-            [email]
-        )
+    def remove_book_from_wishlist(self, book_id):
+        if book_id in self.wishlist:
+            self.wishlist.remove(book_id)
+            self.save()
+
+

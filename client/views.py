@@ -1,91 +1,121 @@
-from rest_framework.authentication import TokenAuthentication
-from rest_framework.permissions import IsAuthenticated, AllowAny
-
-from .serializers import RegistrationSerializer, ActivationSerializer, LoginSerializer
-from .models import CustomUser
-from django.contrib.auth import login, authenticate
-from rest_framework import status
-from rest_framework.response import Response
-from django.contrib.auth import get_user_model
-from rest_framework.generics import GenericAPIView
+from django.shortcuts import get_object_or_404, render
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+from rest_framework.generics import RetrieveAPIView
 from rest_framework.views import APIView
-from .serializers import PasswordResetRequestSerializer, PasswordResetConfirmSerializer
+from rest_framework.response import Response
+from django.http import JsonResponse
+from .models import CustomUser
+from books.models import Book
+from .serializers import RegistrationSerializer, ActivationSerializer, LoginSerializer, ChangePasswordSerializer, \
+    CustomUserSerializer
+from django.contrib.auth import get_user_model
+from rest_framework.authtoken.views import ObtainAuthToken
+from rest_framework.authtoken.models import Token
+from .permissions import IsActivePermission
+from rest_framework.permissions import IsAuthenticated
 
+User = get_user_model()
 
 
 class RegistrationView(APIView):
 
     def post(self, request):
-        serializer = RegistrationSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save()
-            user.is_active = False
-            user.save()
-            user.create_activation_code()
-            user.send_activation_code(user.email, user.activation_code)
-            return Response({'message': 'Registration successful. Check your email for activation code.'}, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer = RegistrationSerializer(
+            data=request.data
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response('Аккаунт успешно создан', status=201)
 
 
 class ActivationView(APIView):
-    def post(self, request):
-        serializer = ActivationSerializer(data=request.data)
-        if serializer.is_valid():
-            email = serializer.validated_data['email']
-            activation_code = serializer.validated_data['activation_code']
-            try:
-                user = CustomUser.objects.get(email=email, activation_code=activation_code)
-                user.is_active = True
-                user.activation_code = ''
-                user.save()
-                login(request, user)
-                return Response({'message': 'Account activated successfully.'}, status=status.HTTP_200_OK)
-            except CustomUser.DoesNotExist:
-                return Response({'message': 'Invalid activation code or email.'}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-class LoginView(APIView):
-    def post(self, request):
-        email = request.data.get('email')
-        password = request.data.get('password')
-
-        user = authenticate(request, email=email, password=password)
-
-        if user is not None:
-            login(request, user)
-            return Response({'detail': 'Authentication successful.'}, status=status.HTTP_200_OK)
-        else:
-            return Response({'detail': 'Invalid credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
-
-
-class PasswordResetRequestView(GenericAPIView):
-    serializer_class = PasswordResetRequestSerializer
 
     def post(self, request):
-        serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
-            email = serializer.validated_data['email']
-            user_model = get_user_model()
-            try:
-                self.user = user_model.objects.get(email=email)
-                return Response(status=status.HTTP_200_OK)
-            except user_model.DoesNotExist:
-                return Response({'detail': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer = ActivationSerializer(
+            data=request.data
+        )
+        if serializer.is_valid(raise_exception=True):
+            serializer.activate()
+            return Response(
+                'Аккаунт успешно активирован',
+                status=200
+            )
 
 
-class PasswordResetConfirmView(PasswordResetRequestView):
+class LoginView(ObtainAuthToken):
+    serializer_class = LoginSerializer
+
+
+class LogoutView(APIView):
+    permission_classes = [IsActivePermission]
+
+    def post(self, request):
+        user = request.user
+        Token.objects.filter(user=user).delete()
+        return Response(
+            'Вы успешно вышли из своего аккаунта'
+        )
+
+
+class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def form_valid(self):
-        serializer = PasswordResetConfirmSerializer(data=self.request.data)
-        if serializer.is_valid():
-            user = self.user
-            if user:
-                user.set_password(serializer.validated_data['new_password'])
-                user.save()
-                return Response({'detail': ('Password has been reset successfully.')}, status=status.HTTP_200_OK)
-            return Response({'detail': ('Invalid data.')}, status=status.HTTP_400_BAD_REQUEST)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    def post(self, request):
+        serializer = ChangePasswordSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+        if serializer.is_valid(raise_exception=True):
+            serializer.set_new_password()
+            return Response(
+                'Пароль успешно обнавлен', status=200
+            )
 
+
+class CustomUserView(RetrieveAPIView):
+    queryset = CustomUser.objects.all()
+    serializer_class = CustomUserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+
+def add_to_wishlist(request, book_id):
+    # Get the currently logged-in user or handle user authentication as needed.
+    print(request)
+    user = request.user
+
+    # Check if the user is authenticated and is a CustomUser.
+    if not user.is_authenticated or not isinstance(user, CustomUser):
+        return JsonResponse({'message': 'Unauthorized'}, status=401)
+
+    try:
+        book_id = int(book_id)
+    except ValueError:
+        return JsonResponse({'message': 'Invalid book ID'}, status=400)
+
+    user.add_book_to_wishlist(book_id)
+    return JsonResponse({'message': 'Book added to wishlist'})
+
+
+def remove_from_wishlist(request, book_id):
+    # Get the currently logged-in user or handle user authentication as needed.
+    user = request.user
+
+    # Check if the user is authenticated and is a CustomUser.
+    if not user.is_authenticated or not isinstance(user, CustomUser):
+        return JsonResponse({'message': 'Unauthorized'}, status=401)
+
+    try:
+        book_id = int(book_id)
+    except ValueError:
+        return JsonResponse({'message': 'Invalid book ID'}, status=400)
+
+    user.remove_book_from_wishlist(book_id)
+    return JsonResponse({'message': 'Book removed from wishlist'})
+
+
+def auth(request):
+    return render(request, 'oauth2.html')
